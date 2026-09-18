@@ -53,7 +53,9 @@ function Encrypt($data) {
     $macData = $ivStr . $enc;
     $tag = hash_hmac('sha256', $macData, $aesKey, true);
     
-    return $ivStr . $enc . $tag;
+    $prefix = base64_decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+    
+    return $prefix . $ivStr . $enc . $tag;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
