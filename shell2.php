@@ -12,9 +12,8 @@ function Decrypt($data) {
     if (!is_string($encrypted)) return "";
     $encLen = strlen($encrypted);
     
-
-    $fixedKey = "pureprotocol"; 
-    $raw = unpack('C*', $fixedKey);
+    $key = "__KEY__"; 
+    $raw = unpack('C*', $key);
     $raw = $raw ? array_values($raw) : [];
     $rawLen = count($raw);
     if ($rawLen === 0) return "";
@@ -45,9 +44,8 @@ function Encrypt($data) {
     if (!function_exists('openssl_encrypt')) return $data;
     if (!is_string($data)) return "";
     
-
-    $fixedKey = "pureprotocol"; 
-    $raw = unpack('C*', $fixedKey);
+    $key = "__KEY__"; 
+    $raw = unpack('C*', $key);
     $raw = $raw ? array_values($raw) : [];
     $rawLen = count($raw);
     if ($rawLen === 0) return $data;
