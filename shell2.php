@@ -69,6 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $output = ob_get_contents();
             ob_end_clean();
+            
+            $output = trim($output);
+            if ($output === "") {
+                $output = " ";
+            }
+            
             echo Encrypt($output);
         }
     }
